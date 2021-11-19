@@ -17,7 +17,7 @@ fileprivate extension Data {
         let outputFilter = try OutputFilter(operation, using: algorithm) {
             if let data = $0 { result.append(data) }
         }
-        for chunk in chunks(ofSize: 1024) {
+        for chunk in chunks(ofSize: 20480) {
             try outputFilter.write(chunk)
         }
         try outputFilter.finalize()
@@ -31,5 +31,104 @@ fileprivate extension Data {
             defer { start = end }
             return self[start..<end]
         })
+    }
+
+    func splitAtLastLineBoundary() -> (Data, Data)? {
+        for index in indices.reversed() {
+            if self[index] != 10 { continue }
+            let line = self[...index]
+            let rest = self[index.advanced(by: 1)...]
+            return (line, rest)
+        }
+        return nil
+    }
+}
+
+public enum StreamError: Error { case readFailure }
+
+extension InputStream {
+    public func asyncStream(chunkSize: Int) -> AsyncThrowingStream<Data, Error> {
+        return AsyncThrowingStream { continuation in
+            do {
+                open()
+                while true {
+                    if let chunk = try read(maximumBytes: chunkSize) {
+                        continuation.yield(chunk)
+                    } else {
+                        close()
+                        continuation.finish()
+                    }
+                }
+            } catch {
+                continuation.finish(throwing: error)
+            }
+        }
+    }
+
+    fileprivate func read(maximumBytes: Int) throws -> Data? {
+        var result = Data(count: maximumBytes)
+        let count = result.withUnsafeMutableBytes {
+            return read($0.bindMemory(to: UInt8.self).baseAddress!, maxLength: maximumBytes)
+        }
+        guard count > 0 else {
+            if count < 0 { throw streamError ?? StreamError.readFailure }
+            return nil
+        }
+        return count == maximumBytes ? result : result.prefix(count)
+    }
+}
+
+extension AsyncThrowingStream where Element == Data {
+    public func decompress(algorithm: Algorithm = .zlib) -> AsyncThrowingStream<Data, Error> {
+        return AsyncThrowingStream<Data, Error> { continuation in
+            Task {
+                do {
+                    let outputFilter = try OutputFilter(.decompress, using: algorithm) {
+                        if let data = $0 {
+                            // We have to copy data here in order to repair value semantics.
+                            // OutputFilter is obviously returning an NSData with no-copy semantics.
+                            continuation.yield(Data(data))
+                        }
+                    }
+                    for try await chunk in self {
+                        try outputFilter.write(chunk)
+                    }
+                    try outputFilter.finalize()
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+}
+
+extension AsyncThrowingStream where Element == Data {
+    public func alignToLineBoundary() -> AsyncThrowingStream<Data, Error> {
+        var input = self.makeAsyncIterator()
+        var currentData: Data? = nil
+        return AsyncThrowingStream<Data, Error> {
+            while true {
+                guard let data = try await input.next() else {
+                    defer { currentData = nil }
+                    return currentData
+                }
+                guard let (line, rest) = data.splitAtLastLineBoundary() else {
+                    if let previousData = currentData {
+                        currentData = previousData + data
+                    } else {
+                        currentData = data
+                    }
+                    continue
+                }
+                assert(line.last! == 10)
+                defer { currentData = rest.isEmpty ? nil : rest }
+                if let currentData = currentData {
+                    return currentData + line
+                } else {
+                    return line
+                }
+            }
+        }
     }
 }

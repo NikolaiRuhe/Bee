@@ -78,7 +78,7 @@ extension InputStream {
     }
 }
 
-extension AsyncThrowingStream where Element == Data {
+extension AsyncSequence where Element == Data {
     public func decompress(algorithm: Algorithm = .zlib) -> AsyncThrowingStream<Data, Error> {
         return AsyncThrowingStream<Data, Error> { continuation in
             Task {
@@ -103,7 +103,7 @@ extension AsyncThrowingStream where Element == Data {
     }
 }
 
-extension AsyncThrowingStream where Element == Data {
+extension AsyncSequence where Element == Data {
     public func alignToLineBoundary() -> AsyncThrowingStream<Data, Error> {
         var input = self.makeAsyncIterator()
         var currentData: Data? = nil

@@ -120,17 +120,12 @@ extension Data {
     }
 
     func parseWords(chunkSize: Int) async -> [BeeDictionary.Entry] {
-        let chunks = alignedChunks(ofSize: chunkSize)
-        var entries: [BeeDictionary.Entry] = []
-        await withTaskGroup(of: [BeeDictionary.Entry].self) { group in
-            for chunk in chunks {
+        await withTaskGroup(of: [BeeDictionary.Entry].self, returning: [BeeDictionary.Entry].self) { group in
+            for chunk in alignedChunks(ofSize: chunkSize) {
                 group.addTask { chunk.parseWords() }
             }
-            for await results in group {
-                entries.append(contentsOf: results)
-            }
+            return await group.reduce(into: []) { $0.append(contentsOf: $1) }
         }
-        return entries
     }
 
     func alignedChunks(ofSize size: Int) -> AnySequence<Data> {

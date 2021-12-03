@@ -26,7 +26,11 @@ let package = Package(
             dependencies: [],
             resources: [
                 .process("Resources")
-            ]
+            ],
+            swiftSettings: [.unsafeFlags([
+                "-Xfrontend", "-warn-concurrency",
+                "-Xfrontend", "-enable-actor-data-race-checks"
+            ])]
         ),
         .testTarget(
             name: "BeeTests",

@@ -70,7 +70,7 @@ extension BeeDictionary {
     actor Container<Wrapped> {
         private var _content: Wrapped? = nil
         private var factory: (() async throws -> Wrapped)?
-        init(factory: @escaping () async throws -> Wrapped) {
+        init(factory: @Sendable @escaping () async throws -> Wrapped) {
             self.factory = factory
         }
         var testDict: Wrapped {

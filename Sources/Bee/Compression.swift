@@ -79,7 +79,47 @@ extension InputStream {
 }
 
 extension AsyncSequence where Element == Data {
-    public func decompress(algorithm: Algorithm = .zlib) -> AsyncThrowingStream<Data, Error> {
+    public func decompressLazy(algorithm: Algorithm = .zlib) -> AsyncThrowingStream<Data, Error> {
+        var buffer = Data()
+        var isDone = false
+        // try! because we're assuming OutputFilter.init will never fail if passed valid arguments.
+        let outputFilter = try! OutputFilter(.decompress, using: algorithm) { decompressed in
+            if let decompressed = decompressed {
+                // We have to copy data here in order to repair value semantics.
+                // OutputFilter is obviously returning an NSData with no-copy semantics.
+                buffer.append(decompressed)
+            }
+        }
+
+        var iterator = self.makeAsyncIterator()
+        return AsyncThrowingStream<Data, Error>(unfolding: {
+            while true {
+                guard let compressed = try await iterator.next() else {
+                    // Input sequence is exhausted → finalize decompression stream
+                    if !isDone {
+                        try outputFilter.finalize()
+                        isDone = true
+                    }
+                    break
+                }
+                try outputFilter.write(compressed)
+                if !buffer.isEmpty {
+                    break
+                }
+            }
+            defer {
+                buffer.removeAll()
+            }
+            // buffer can only be empty here if the input sequence is exhausted.
+            return buffer.isEmpty ? nil : buffer
+        })
+    }
+}
+
+/// - TODO: This should be `where Element == Data, Self: Sendable` (we think), but that breaks some
+///   tests that call this on `AsyncThrowingStream`.
+extension AsyncSequence where Element == Data {
+    public func decompressEager(algorithm: Algorithm = .zlib) -> AsyncThrowingStream<Data, Error> {
         return AsyncThrowingStream<Data, Error> { continuation in
             Task {
                 do {

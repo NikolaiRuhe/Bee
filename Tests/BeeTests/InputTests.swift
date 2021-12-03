@@ -13,7 +13,7 @@ final class InputTests: XCTestCase {
     func testDecompressingAsyncStream() async throws {
         let sut = InputStream(url: Resources.dictionaryURL)!
             .asyncStream(chunkSize: 2048)
-            .decompress(algorithm: .zlib)
+            .decompressEager(algorithm: .zlib)
 
         let count = try await sut.reduce(0) { $0 + $1.count }
         XCTAssertEqual(count, 35_801_440)
@@ -22,7 +22,7 @@ final class InputTests: XCTestCase {
     func testAlignBoundaryAsyncStream() async throws {
         let sut = InputStream(url: Resources.dictionaryURL)!
             .asyncStream(chunkSize: 2048)
-            .decompress(algorithm: .zlib)
+            .decompressEager(algorithm: .zlib)
             .alignToLineBoundary()
 
         for try await chunk in sut {

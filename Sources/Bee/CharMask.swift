@@ -14,7 +14,7 @@ public extension CharMask {
 }
 
 
-public struct Chars: Equatable {
+public struct Chars: Equatable, Sendable {
     let sortedElements: [Char]
 
     public init(_ chars: [Char]) {

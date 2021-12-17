@@ -13,11 +13,21 @@ final class BeePerformanceTests: XCTestCase {
         }
     }
 
-    func testAsyncDecompressionPerformance() {
+    func testEagerAsyncDecompressionPerformance() {
         measureAsync {
             let sut = InputStream(url: Resources.dictionaryURL)!
                 .asyncStream(chunkSize: 20480)
-                .decompress()
+                .decompressEager()
+            let count = try! await sut.reduce(0) { $0 + $1.count }
+            XCTAssertEqual(count, 35_801_440)
+        }
+    }
+
+    func testLazyAsyncDecompressionPerformance() {
+        measureAsync {
+            let sut = InputStream(url: Resources.dictionaryURL)!
+                .asyncStream(chunkSize: 20480)
+                .decompressLazy()
             let count = try! await sut.reduce(0) { $0 + $1.count }
             XCTAssertEqual(count, 35_801_440)
         }
